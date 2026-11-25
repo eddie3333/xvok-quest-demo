@@ -25,6 +25,10 @@ def settings():
     db=engine.connect();db.execute('CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT)');db.commit();rows=db.execute('SELECT key,value FROM settings').fetchall();db.close();return {r['key']:json.loads(r['value']) for r in rows}
 def save(key,value):
     db=engine.connect();db.execute('CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT)');db.execute('INSERT INTO settings VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps(value)));db.commit();db.close()
+def ensure_artists():
+    db=engine.connect()
+    db.execute('''CREATE TABLE IF NOT EXISTS artists(id TEXT PRIMARY KEY,name TEXT,handle TEXT,spotify TEXT,instagram TEXT,tiktok TEXT,monthly_listeners INTEGER,budget_promo TEXT,budget_mv TEXT,budget_shortform TEXT,notes TEXT,care_level INTEGER,alignment TEXT,active INTEGER,created TEXT)''')
+    db.commit();db.close()
 def ensure_ledger():
     db=engine.connect()
     db.executescript('''CREATE TABLE IF NOT EXISTS ledger(id TEXT PRIMARY KEY,created TEXT,creative_id TEXT,artist TEXT,song TEXT,version TEXT,source_interval TEXT,collection TEXT,caption TEXT,account TEXT,local_file TEXT,render_task_id TEXT,scheduled_time TEXT,tz TEXT,scheduler_id TEXT,status TEXT,public_url TEXT,observed_time TEXT);
@@ -39,20 +43,23 @@ def seed_profile():
     db=engine.connect()
     for r in seed.get('rows',[]):
         db.execute('INSERT OR IGNORE INTO snapshots(post_id,observed,metric_time,song,platform,collection,mapping,published,age_hours,valid,payload) VALUES(?,?,?,?,?,?,?,?,?,?,?)',(r['post_id'],r['observed'],r['metric_time'],r['song'],r['platform'],r['collection'],r['mapping'],r['published'],r['age_hours'],r['valid'],json.dumps({'metrics':r['metrics'],'caption':r['caption'],'source':None,'duration':r.get('duration')})))
+    for a in seed.get('artists',[]):
+        db.execute('INSERT OR IGNORE INTO artists VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(a['id'],a['name'],a.get('handle'),a.get('spotify'),a.get('instagram'),a.get('tiktok'),a.get('monthly_listeners',0),a.get('budget_promo'),a.get('budget_mv'),a.get('budget_shortform'),a.get('notes'),a.get('care_level',0),a.get('alignment','neutral'),1 if a.get('active') else 0,engine.now()))
     db.commit();db.close()
-    save('artist',seed['artist']);save('seed_loaded',True);save('campaign_date',seed['snapshot_date']);save('release_notes_seen',False);save('edition',seed.get('edition','demo'));save('styles',seed.get('styles',engine.APPROVED));save('songs',seed.get('songs',[]));save('repository',seed.get('repository',REPO));save('lyric_presets',LYRIC_PRESETS)
-    ensure_ledger()
+    save('artist',seed['artist']);save('seed_loaded',True);save('campaign_date',seed['snapshot_date']);save('release_notes_seen',False);save('edition',seed.get('edition','demo'));save('styles',seed.get('styles',engine.APPROVED));save('songs',seed.get('songs',[]));save('repository',seed.get('repository',REPO));save('lyric_presets',LYRIC_PRESETS);save('guild_name',seed.get('guild_name','EXODUS'));save('artists_loaded',True)
+    ensure_artists();ensure_ledger()
 def campaign():
     s=settings();engine.APPROVED=s.get('styles',engine.APPROVED);base=engine.state();base.pop('repeat_batch',None)
     portals=[{**v,'id':k,'status':s.get('connection:'+k,{}).get('status','not_confirmed'),'confirmed_at':s.get('connection:'+k,{}).get('at')} for k,v in PORTALS.items()]
     for portal in portals:
         if portal['id']=='github':portal['url']=s.get('repository',REPO)+'/releases'
-    db=engine.connect();ensure_ledger()
+    db=engine.connect();ensure_artists();ensure_ledger()
     ledger=[dict(r) for r in db.execute('SELECT * FROM ledger ORDER BY created DESC').fetchall()]
     exports=[dict(r) for r in db.execute('SELECT * FROM exports ORDER BY created DESC').fetchall()]
     backups=[dict(r) for r in db.execute('SELECT * FROM backups ORDER BY created DESC').fetchall()]
+    artists=[dict(r) for r in db.execute('SELECT * FROM artists ORDER BY monthly_listeners DESC,name').fetchall()]
     db.close()
-    base.update({'version':VERSION,'edition':s.get('edition','demo'),'repository':s.get('repository',REPO),'artist':s.get('artist',{'name':'Your Artist'}),'songs':s.get('songs',[]),'styles':engine.APPROVED,'campaign_date':s.get('campaign_date'),'player':s.get('player'),'portals':portals,'xp':sum(v.get('xp',0) for k,v in s.items() if k.startswith('award:')),'notes':s.get('notes',[]),'engine_ready':False,'ledger':ledger,'exports':exports,'backups':backups,'lyric_presets':s.get('lyric_presets',LYRIC_PRESETS),'competitor_notes':competitor_notes()})
+    base.update({'version':VERSION,'edition':s.get('edition','demo'),'repository':s.get('repository',REPO),'artist':s.get('artist',{'name':'Your Artist'}),'songs':s.get('songs',[]),'styles':engine.APPROVED,'campaign_date':s.get('campaign_date'),'player':s.get('player'),'portals':portals,'xp':sum(v.get('xp',0) for k,v in s.items() if k.startswith('award:')),'notes':s.get('notes',[]),'engine_ready':False,'ledger':ledger,'exports':exports,'backups':backups,'lyric_presets':s.get('lyric_presets',LYRIC_PRESETS),'competitor_notes':competitor_notes(),'artists':artists,'guild_name':s.get('guild_name','EXODUS')})
     try:engine.binary('ffmpeg');engine.binary('ffprobe');base['engine_ready']=True
     except ValueError:pass
     return base
@@ -201,7 +208,7 @@ class DesktopHandler(engine.Handler):
     def do_POST(self):
         if not self.allowed():return self.send({'error':'Local access only'},code=403)
         if self.headers.get('X-Local-Token')!=engine.TOKEN:return self.send({'error':'Please reopen the app.'},code=403)
-        if self.path in ['/api/profile','/api/portal','/api/confirm','/api/note','/api/save','/api/restore','/api/update','/api/demo','/api/prepare','/api/ledger','/api/exportverify','/api/backup']:
+        if self.path in ['/api/profile','/api/portal','/api/confirm','/api/note','/api/save','/api/restore','/api/update','/api/demo','/api/prepare','/api/ledger','/api/exportverify','/api/backup','/api/artists','/api/artist/add','/api/artist/update','/api/artist/select']:
             try:
                 length=int(self.headers.get('Content-Length','0'))
                 if length>16384:raise ValueError('Request too large.')
@@ -226,6 +233,20 @@ class DesktopHandler(engine.Handler):
                 if self.path=='/api/ledger':return self.send(add_ledger_entry(data))
                 if self.path=='/api/exportverify':return self.send(add_export_verify(data))
                 if self.path=='/api/backup':return self.send(add_backup(data))
+                if self.path=='/api/artists':ensure_artists();db=engine.connect();rows=[dict(r) for r in db.execute('SELECT * FROM artists ORDER BY monthly_listeners DESC,name').fetchall()];db.close();return self.send({'artists':rows})
+                if self.path=='/api/artist/add':
+                    import uuid; aid=data.get('id') or uuid.uuid4().hex[:8]; ensure_artists(); db=engine.connect()
+                    db.execute('INSERT OR REPLACE INTO artists VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(aid,data['name'],data.get('handle'),data.get('spotify'),data.get('instagram'),data.get('tiktok'),data.get('monthly_listeners',0),data.get('budget_promo'),data.get('budget_mv'),data.get('budget_shortform'),data.get('notes'),data.get('care_level',0),data.get('alignment','neutral'),1 if data.get('active') else 0,engine.now()))
+                    db.commit();db.close();award('artist-add',15);return self.send({'ok':True,'id':aid})
+                if self.path=='/api/artist/update':
+                    ensure_artists(); db=engine.connect()
+                    fields=[];vals=[]
+                    for k in ['name','handle','spotify','instagram','tiktok','monthly_listeners','budget_promo','budget_mv','budget_shortform','notes','care_level','alignment','active']:
+                        if k in data:fields.append(k+'=?');vals.append(data[k])
+                    if fields:vals.append(data['id']);db.execute('UPDATE artists SET '+','.join(fields)+' WHERE id=?',vals);db.commit()
+                    db.close();return self.send({'ok':True})
+                if self.path=='/api/artist/select':
+                    save('current_artist',data['id']);award('artist-select',5);return self.send({'ok':True})
             except Exception as e:logging.exception('App action failed');return self.send({'error':str(e)},code=400)
         return super().do_POST()
 

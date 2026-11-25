@@ -21,9 +21,10 @@ def date(value):
     except (ValueError,AttributeError):return None
 def connect():
     db=sqlite3.connect(DB);db.row_factory=sqlite3.Row
-    db.executescript('''CREATE TABLE IF NOT EXISTS snapshots(id INTEGER PRIMARY KEY,post_id TEXT,observed TEXT,metric_time TEXT,song TEXT,platform TEXT,collection TEXT,mapping TEXT,published TEXT,age_hours REAL,valid INTEGER,payload TEXT,UNIQUE(post_id,metric_time,payload));
-    CREATE TABLE IF NOT EXISTS experiments(id TEXT PRIMARY KEY,created TEXT,song TEXT,collection TEXT,hypothesis TEXT,status TEXT,variant TEXT);
-    CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,created TEXT,status TEXT,result TEXT);''')
+    db.executescript('''CREATE TABLE IF NOT EXISTS snapshots(id INTEGER PRIMARY KEY,post_id TEXT,observed TEXT,metric_time TEXT,song TEXT,platform TEXT,collection TEXT,mapping TEXT,published TEXT,age_hours REAL,valid INTEGER,payload TEXT,artist_id TEXT,UNIQUE(post_id,metric_time,payload));
+    CREATE TABLE IF NOT EXISTS experiments(id TEXT PRIMARY KEY,created TEXT,song TEXT,collection TEXT,hypothesis TEXT,status TEXT,variant TEXT,artist_id TEXT);
+    CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,created TEXT,status TEXT,result TEXT,artist_id TEXT);
+    CREATE TABLE IF NOT EXISTS artists(id TEXT PRIMARY KEY,name TEXT,handle TEXT,spotify TEXT,instagram TEXT,tiktok TEXT,monthly_listeners INTEGER,budget_promo TEXT,budget_mv TEXT,budget_shortform TEXT,notes TEXT,care_level INTEGER,alignment TEXT,active INTEGER,created TEXT);''')
     return db
 def norm(text):return ' '.join((text or '').lower().split())
 def catalogue():
