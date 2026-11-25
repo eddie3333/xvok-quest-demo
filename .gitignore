@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.spec
+*.sqlite3
+*.qsave
+.env
+private/
+seed/profile.personal.json
+seed/profile.*.json
+!seed/profile.json

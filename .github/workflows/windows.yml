@@ -1,0 +1,28 @@
+name: Build Windows demo (Hibiki no Yoru)
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r requirements-build.txt
+      - run: python -m unittest discover -s tests
+      - run: python scripts/build.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Windows-demo
+          path: dist/demo/*
+      - name: Publish tagged demo
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release create $env:GITHUB_REF_NAME dist/demo/HibikiNoYoru.exe dist/demo/*.zip dist/demo/SHA256SUMS.txt --title "Windows demo $env:GITHUB_REF_NAME" --notes "Public preview with fictional data. No artist accounts or media included. Unsigned Windows executable."

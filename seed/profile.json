@@ -1,0 +1,148 @@
+{
+  "edition": "demo",
+  "artist": {
+    "name": "Explorer",
+    "handle": ""
+  },
+  "snapshot_date": "Example only",
+  "repository": "https://github.com/eddie3333/hibiki-no-yoru",
+  "styles": [
+    "Winter Glow",
+    "Night Ride",
+    "Pixel Rush",
+    "Anime Action",
+    "Liminal Rooms"
+  ],
+  "songs": [
+    {
+      "title": "Frost Tape",
+      "description": "A fictional winter sound. Try snow, night rides and retro visuals."
+    },
+    {
+      "title": "After Hours",
+      "description": "A fictional second release. Give it a separate experiment."
+    }
+  ],
+  "rows": [
+    {
+      "post_id": "demo-41df13f4b776",
+      "observed": "2026-11-24T12:00:00Z",
+      "metric_time": "2026-11-24T12:00:00Z",
+      "song": "Frost Tape",
+      "platform": "tiktok",
+      "collection": "Winter Glow",
+      "mapping": "illustrative sample, not real data",
+      "published": "2026-11-23T12:00:00Z",
+      "age_hours": 24,
+      "valid": 1,
+      "metrics": {
+        "views": 1250,
+        "reactions": 75,
+        "shares": 15,
+        "averageTimeWatched": 10
+      },
+      "caption": "Illustrative demo post",
+      "duration": 30000
+    },
+    {
+      "post_id": "demo-7b9397075415",
+      "observed": "2026-11-24T12:00:00Z",
+      "metric_time": "2026-11-24T12:00:00Z",
+      "song": "Frost Tape",
+      "platform": "tiktok",
+      "collection": "Night Ride",
+      "mapping": "illustrative sample, not real data",
+      "published": "2026-11-23T12:00:00Z",
+      "age_hours": 24,
+      "valid": 1,
+      "metrics": {
+        "views": 810,
+        "reactions": 49,
+        "shares": 10,
+        "averageTimeWatched": 11
+      },
+      "caption": "Illustrative demo post",
+      "duration": 30000
+    },
+    {
+      "post_id": "demo-c1d0b43cd483",
+      "observed": "2026-11-24T12:00:00Z",
+      "metric_time": "2026-11-24T12:00:00Z",
+      "song": "Frost Tape",
+      "platform": "tiktok",
+      "collection": "Pixel Rush",
+      "mapping": "illustrative sample, not real data",
+      "published": "2026-11-23T12:00:00Z",
+      "age_hours": 24,
+      "valid": 1,
+      "metrics": {
+        "views": 430,
+        "reactions": 26,
+        "shares": 5,
+        "averageTimeWatched": 12
+      },
+      "caption": "Illustrative demo post",
+      "duration": 30000
+    },
+    {
+      "post_id": "demo-a81ad64b9d09",
+      "observed": "2026-11-24T12:00:00Z",
+      "metric_time": "2026-11-24T12:00:00Z",
+      "song": "After Hours",
+      "platform": "tiktok",
+      "collection": "Winter Glow",
+      "mapping": "illustrative sample, not real data",
+      "published": "2026-11-23T12:00:00Z",
+      "age_hours": 24,
+      "valid": 1,
+      "metrics": {
+        "views": 380,
+        "reactions": 23,
+        "shares": 5,
+        "averageTimeWatched": 10
+      },
+      "caption": "Illustrative demo post",
+      "duration": 30000
+    },
+    {
+      "post_id": "demo-541fbf2dd6e5",
+      "observed": "2026-11-24T12:00:00Z",
+      "metric_time": "2026-11-24T12:00:00Z",
+      "song": "After Hours",
+      "platform": "tiktok",
+      "collection": "Night Ride",
+      "mapping": "illustrative sample, not real data",
+      "published": "2026-11-23T12:00:00Z",
+      "age_hours": 24,
+      "valid": 1,
+      "metrics": {
+        "views": 620,
+        "reactions": 37,
+        "shares": 7,
+        "averageTimeWatched": 11
+      },
+      "caption": "Illustrative demo post",
+      "duration": 30000
+    },
+    {
+      "post_id": "demo-a34b5d5df38a",
+      "observed": "2026-11-24T12:00:00Z",
+      "metric_time": "2026-11-24T12:00:00Z",
+      "song": "After Hours",
+      "platform": "tiktok",
+      "collection": "Pixel Rush",
+      "mapping": "illustrative sample, not real data",
+      "published": "2026-11-23T12:00:00Z",
+      "age_hours": 24,
+      "valid": 1,
+      "metrics": {
+        "views": 280,
+        "reactions": 17,
+        "shares": 3,
+        "averageTimeWatched": 12
+      },
+      "caption": "Illustrative demo post",
+      "duration": 30000
+    }
+  ]
+}
