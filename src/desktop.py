@@ -111,22 +111,34 @@ def validate_update(source):
 def dialog_action(action):
     import tkinter as tk
     from tkinter import filedialog
-    root=tk.Tk();root.withdraw();root.attributes('-topmost',True)
-    try:
-        if action=='save':
-            path=filedialog.asksaveasfilename(parent=root,title='Save your Hibiki no Yoru campaign',defaultextension='.qsave',initialfile='Hibiki-campaign.qsave',filetypes=[('Hibiki no Yoru campaign','*.qsave')]);return export_save(path) if path else {'cancelled':True}
-        if action=='restore':
-            path=filedialog.askopenfilename(parent=root,title='Open your campaign save',filetypes=[('Hibiki no Yoru campaign','*.qsave')]);return import_save(path) if path else {'cancelled':True}
-        if action=='update':
-            path=filedialog.askopenfilename(parent=root,title='Choose the Windows update ZIP from Hibiki no Yoru Releases',filetypes=[('Windows update','*.zip')])
-            if not path:return {'cancelled':True}
-            meta,raw=validate_update(path)
-            if not getattr(sys,'frozen',False):return {'ok':False,'message':'Update installation is available in the EXE version. Your campaign is preserved.'}
-            staged=engine.DATA/'updates'/meta['version'];staged.mkdir(parents=True,exist_ok=True);exe=staged/(APP+'.exe');exe.write_bytes(raw)
-            subprocess.Popen([str(exe),'--apply-update',sys.executable,'--wait-pid',str(os.getpid())],creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
-            threading.Timer(1.5,lambda:os._exit(0)).start();return {'ok':True,'message':'Installing update and restarting. Your campaign and browser sign-ins are kept.'}
-    finally:root.destroy()
-    raise ValueError('Unknown action.')
+    import threading
+    result={'value':None,'error':None}
+    def worker():
+        try:
+            root=tk.Tk();root.withdraw();root.attributes('-topmost',True)
+            try:
+                if action=='save':
+                    path=filedialog.asksaveasfilename(parent=root,title='Save your Hibiki no Yoru campaign',defaultextension='.qsave',initialfile='Hibiki-campaign.qsave',filetypes=[('Hibiki no Yoru campaign','*.qsave')]);result['value']=export_save(path) if path else {'cancelled':True}
+                elif action=='restore':
+                    path=filedialog.askopenfilename(parent=root,title='Open your campaign save',filetypes=[('Hibiki no Yoru campaign','*.qsave')]);result['value']=import_save(path) if path else {'cancelled':True}
+                elif action=='update':
+                    path=filedialog.askopenfilename(parent=root,title='Choose the Windows update ZIP from Hibiki no Yoru Releases',filetypes=[('Windows update','*.zip')])
+                    if not path:result['value']={'cancelled':True}
+                    else:
+                        meta,raw=validate_update(path)
+                        if not getattr(sys,'frozen',False):result['value']={'ok':False,'message':'Update installation is available in the EXE version. Your campaign is preserved.'}
+                        else:
+                            staged=engine.DATA/'updates'/meta['version'];staged.mkdir(parents=True,exist_ok=True);exe=staged/(APP+'.exe');exe.write_bytes(raw)
+                            subprocess.Popen([str(exe),'--apply-update',sys.executable,'--wait-pid',str(os.getpid())],creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+                            threading.Timer(1.5,lambda:os._exit(0)).start();result['value']={'ok':True,'message':'Installing update and restarting. Your campaign and browser sign-ins are kept.'}
+                else:raise ValueError('Unknown action.')
+            finally:root.destroy()
+        except Exception as e:result['error']=str(e)
+    t=threading.Thread(target=worker,daemon=True);t.start();t.join(timeout=120)
+    if t.is_alive():return {'cancelled':True,'message':'The file dialog timed out. Please try again.'}
+    if result['error']:raise ValueError(result['error'])
+    return result['value']
+
 def make_demo():
     ff=engine.binary('ffmpeg');d=engine.DATA/'demo';d.mkdir(exist_ok=True)
     colors=['0x152b4b','0x50345f','0x1c5046']
