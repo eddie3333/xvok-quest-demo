@@ -23,7 +23,7 @@ def connect():
     db=sqlite3.connect(DB);db.row_factory=sqlite3.Row
     db.executescript('''CREATE TABLE IF NOT EXISTS snapshots(id INTEGER PRIMARY KEY,post_id TEXT,observed TEXT,metric_time TEXT,song TEXT,platform TEXT,collection TEXT,mapping TEXT,published TEXT,age_hours REAL,valid INTEGER,payload TEXT,artist_id TEXT,UNIQUE(post_id,metric_time,payload));
     CREATE TABLE IF NOT EXISTS experiments(id TEXT PRIMARY KEY,created TEXT,song TEXT,collection TEXT,hypothesis TEXT,status TEXT,variant TEXT,artist_id TEXT);
-    CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,created TEXT,status TEXT,result TEXT,artist_id TEXT);
+    CREATE TABLE IF NOT EXISTS roles(id TEXT PRIMARY KEY,created TEXT,status TEXT,result TEXT,artist_id TEXT);
     CREATE TABLE IF NOT EXISTS artists(id TEXT PRIMARY KEY,name TEXT,handle TEXT,spotify TEXT,instagram TEXT,tiktok TEXT,monthly_listeners INTEGER,budget_promo TEXT,budget_mv TEXT,budget_shortform TEXT,notes TEXT,care_level INTEGER,alignment TEXT,active INTEGER,created TEXT);''')
     return db
 def norm(text):return ' '.join((text or '').lower().split())
@@ -75,8 +75,8 @@ def coverage(rows):
     return result
 
 def state():
-    rows=snapshot_rows();db=connect();ex=[dict(r) for r in db.execute('SELECT * FROM experiments ORDER BY created,id')];jobs=[dict(r) for r in db.execute('SELECT * FROM jobs ORDER BY created DESC')];db.close()
-    return {'rows':rows,'coverage':coverage(rows),'experiments':ex,'jobs':jobs,'token':TOKEN,'notice':'Snapshot ages use the source metric timestamp. Lifetime ranks are provisional, not controlled comparisons. Source metrics can lag; old 24/48/72-hour results cannot be reconstructed from lifetime totals.','updated':max((r['metric_time'] or '' for r in rows),default=''),'source':'Imported Buffer snapshot, 2026-11-24. Manual refresh required; no background connector.'}
+    rows=snapshot_rows();db=connect();ex=[dict(r) for r in db.execute('SELECT * FROM experiments ORDER BY created,id')];roles=[dict(r) for r in db.execute('SELECT * FROM roles ORDER BY created DESC')];db.close()
+    return {'rows':rows,'coverage':coverage(rows),'experiments':ex,'roles':roles,'token':TOKEN,'notice':'Snapshot ages use the source metric timestamp. Lifetime ranks are provisional, not controlled comparisons. Source metrics can lag; old 24/48/72-hour results cannot be reconstructed from lifetime totals.','updated':max((r['metric_time'] or '' for r in rows),default=''),'source':'Imported Buffer snapshot, 2026-11-24. Manual refresh required; no background connector.'}
 def plan():
     return {'ok':False,'message':'Choose a song in the campaign screen to prepare a run.'}
 
@@ -89,8 +89,8 @@ def binary(name):
     if not found:raise ValueError('Install FFmpeg or put '+name+' on PATH.')
     return str(found)
 def probe(path):return json.loads(subprocess.check_output([binary('ffprobe'),'-v','error','-show_format','-show_streams','-of','json',str(path)],text=True))
-def render(manifest,job_id):
-    jobdir=DATA/'renders'/job_id;jobdir.mkdir(parents=True)
+def render(manifest,role_id):
+    roledir=DATA/'renders'/role_id;roledir.mkdir(parents=True)
     try:
         audio=Path(manifest['audio']);audio_start=float(manifest.get('audio_start',0));shots=manifest['shots']
         if not audio.is_file() or audio_start<0:raise ValueError('Choose an existing local audio file and a nonnegative start.')
@@ -103,16 +103,16 @@ def render(manifest,job_id):
             src=Path(shot['path']);length=float(shot['duration']);start=float(shot.get('start',0))
             if not src.is_file() or start<0 or length<=0:raise ValueError('Invalid shot source, start or length.')
             if start+length>float(probe(src)['format']['duration'])+0.05:raise ValueError('Shot exceeds source duration.')
-            target=jobdir/f'part-{i:02}.mp4'
+            target=roledir/f'part-{i:02}.mp4'
             args=[binary('ffmpeg'),'-nostdin','-v','error','-ss',str(start),'-i',str(src),'-t',str(length),'-an','-vf','scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1,fps=30','-c:v','libx264','-preset','veryfast','-crf','22','-pix_fmt','yuv420p',str(target)]
             subprocess.run(args,check=True,capture_output=True,timeout=180);parts.append(target)
-        (jobdir/'cuts.txt').write_text('\n'.join("file '"+p.name+"'" for p in parts))
+        (roledir/'cuts.txt').write_text('\n'.join("file '"+p.name+"'" for p in parts))
         # A local SRT is optional; copy to a fixed safe filename for filter escaping.
         vf=[]
         if manifest.get('srt'):
             subs=Path(manifest['srt'])
             if not subs.is_file():raise ValueError('Subtitle file not found.')
-            shutil.copyfile(subs,jobdir/'lyrics.srt')
+            shutil.copyfile(subs,roledir/'lyrics.srt')
             content=subs.read_text(encoding='utf-8-sig').replace('\r','')
             events=[]
             def asstime(s):
@@ -127,20 +127,20 @@ def render(manifest,job_id):
                 events.append('Dialogue: 0,'+asstime(times[0])+','+asstime(times[1])+',Default,,0,0,0,,{\\an5\\pos(360,640)}'+text)
             if not events:raise ValueError('No valid timed subtitle cues found.')
             header='[Script Info]\nScriptType: v4.00+\nPlayResX: 720\nPlayResY: 1280\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,62,&H00FFFFFF,&H00FFFFFF,&H80000000,&H00000000,0,0,0,0,82,100,0,0,1,1,0,5,60,60,100,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
-            (jobdir/'lyrics.ass').write_text(header+'\n'.join(events),encoding='utf-8')
+            (roledir/'lyrics.ass').write_text(header+'\n'.join(events),encoding='utf-8')
             vf=['-vf','ass=lyrics.ass']
         args=[binary('ffmpeg'),'-nostdin','-v','error','-f','concat','-safe','0','-i','cuts.txt','-ss',str(audio_start),'-i',str(audio),'-map','0:v:0','-map','1:a:0','-t',str(duration),*vf,'-c:v','libx264','-preset','veryfast','-crf','21','-c:a','aac','-b:a','192k','-movflags','+faststart','preview.mp4']
-        subprocess.run(args,cwd=jobdir,check=True,capture_output=True,timeout=240)
-        result={'file':str(jobdir/'preview.mp4'),'duration':duration,'manifest':manifest,'note':'Local preview only; manual cuts, optional approximate lyric typography. No upload or automated beat detection.'}
-        (jobdir/'manifest.json').write_text(json.dumps(result,indent=2))
+        subprocess.run(args,cwd=roledir,check=True,capture_output=True,timeout=240)
+        result={'file':str(roledir/'preview.mp4'),'duration':duration,'manifest':manifest,'note':'Local preview only; manual cuts, optional approximate lyric typography. No upload or automated beat detection.'}
+        (roledir/'manifest.json').write_text(json.dumps(result,indent=2))
         status='complete'
     except Exception as exc:
         detail=exc.stderr.decode(errors='replace')[-1500:] if isinstance(exc,subprocess.CalledProcessError) and exc.stderr else str(exc)
         status='failed';result={'error':detail}
-    db=connect();db.execute('UPDATE jobs SET status=?,result=? WHERE id=?',(status,json.dumps(result),job_id));db.commit();db.close()
+    db=connect();db.execute('UPDATE roles SET status=?,result=? WHERE id=?',(status,json.dumps(result),role_id));db.commit();db.close()
 def start_render(manifest):
-    job=uuid.uuid4().hex[:12];db=connect();db.execute('INSERT INTO jobs VALUES(?,?,?,?)',(job,now(),'rendering','{}'));db.commit();db.close()
-    threading.Thread(target=render,args=(manifest,job),daemon=True).start();return {'job_id':job,'status':'rendering'}
+    role=uuid.uuid4().hex[:12];db=connect();db.execute('INSERT INTO roles VALUES(?,?,?,?)',(role,now(),'rendering','{}'));db.commit();db.close()
+    threading.Thread(target=render,args=(manifest,role),daemon=True).start();return {'role_id':role,'status':'rendering'}
 class Handler(BaseHTTPRequestHandler):
     def send(self,data,ctype='application/json',code=200):
         content=json.dumps(data,ensure_ascii=False).encode() if ctype=='application/json' else data

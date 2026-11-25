@@ -95,7 +95,7 @@ def import_save(source):
     try:
         with closing(sqlite3.connect(candidate)) as c:
             if c.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('Campaign save is damaged.')
-            for table in ['snapshots','experiments','jobs']:c.execute('SELECT * FROM '+table+' LIMIT 1')
+            for table in ['snapshots','experiments','roles']:c.execute('SELECT * FROM '+table+' LIMIT 1')
             edition=json.loads(c.execute("SELECT value FROM settings WHERE key='edition'").fetchone()[0])
             if edition!=engine.EDITION:raise ValueError('This campaign belongs to a different edition.')
         backup=engine.DATA/('before-restore-'+str(int(time.time()))+'.qsave');export_save(backup)
@@ -178,6 +178,53 @@ def competitor_notes():
      {'name':'LYRC','strength':'30 lyric presets, smart shuffle matching clips to lyrics, autopilot daily posting, artist page, ONCE presaves','gap':'We add independent preset list + planning; no auto-post yet','status':'reference'},
      {'name':'0dB.studio','strength':'Batch manager sends daily videos to TikTok inbox, AI lyric transcription, storage/songs','gap':'We add batch ledger + AI transcription planning','status':'reference'},
     ]
+def detect_blender():
+    import shutil
+    found = shutil.which('blender')
+    if found: return found
+    for p in [r'C:\Program Files\Blender Foundation\Blender 5.3\blender.exe',
+              r'C:\Program Files\Blender Foundation\Blender 4.2\blender.exe']:
+        if os.path.isfile(p): return p
+    return None
+
+def detect_godot():
+    import shutil
+    found = shutil.which('godot')
+    if found: return found
+    p = r'C:\Users\eddie\Documents\Codex\2026-11-21\publish-umbral-soul-symphony-arena-zero\work\godot-editor\Godot_v4.7.2-stable_win64.exe'
+    if os.path.isfile(p): return p
+    return None
+
+def generate_vibe_asset(seed, tempo=120, key='C', energy=0.5):
+    blender = detect_blender()
+    if not blender:
+        return {'ok': False, 'error': 'Blender not found.'}
+    import subprocess
+    out_dir = engine.DATA/'assets'/str(seed)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    script = engine.ROOT/'scripts'/'blender_gen.py'
+    if not script.exists():
+        # Try relative to source file
+        script = Path(__file__).resolve().parent.parent/'scripts'/'blender_gen.py'
+    if not script.exists():
+        return {'ok': False, 'error': 'Blender gen script not found at '+str(script)}
+    args = [blender, '--background', '--python', str(script), '--',
+            '--seed', str(seed), '--tempo', str(tempo), '--key', key,
+            '--energy', str(energy), '--output', str(out_dir)]
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, timeout=300)
+        if result.returncode != 0:
+            return {'ok': False, 'error': result.stderr[-1500:] if result.stderr else 'Blender failed'}
+        glb = out_dir/f'vibe_{seed}.glb'
+        sprites = out_dir/f'sprites_{seed}'
+        return {'ok': True, 'glb': str(glb) if glb.exists() else None,
+                'sprites': str(sprites) if sprites.exists() else None,
+                'log': result.stdout[-500:]}
+    except subprocess.TimeoutExpired:
+        return {'ok': False, 'error': 'Blender timed out (5 min).'}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
 def add_ledger_entry(data):
     ensure_ledger()
     import uuid
@@ -208,7 +255,7 @@ class DesktopHandler(engine.Handler):
     def do_POST(self):
         if not self.allowed():return self.send({'error':'Local access only'},code=403)
         if self.headers.get('X-Local-Token')!=engine.TOKEN:return self.send({'error':'Please reopen the app.'},code=403)
-        if self.path in ['/api/profile','/api/portal','/api/confirm','/api/note','/api/save','/api/restore','/api/update','/api/demo','/api/prepare','/api/ledger','/api/exportverify','/api/backup','/api/artists','/api/artist/add','/api/artist/update','/api/artist/select']:
+        if self.path in ['/api/profile','/api/portal','/api/confirm','/api/note','/api/save','/api/restore','/api/update','/api/demo','/api/prepare','/api/ledger','/api/exportverify','/api/backup','/api/artists','/api/artist/add','/api/artist/update','/api/artist/select','/api/tools','/api/generate-vibe']:
             try:
                 length=int(self.headers.get('Content-Length','0'))
                 if length>16384:raise ValueError('Request too large.')
@@ -233,6 +280,10 @@ class DesktopHandler(engine.Handler):
                 if self.path=='/api/ledger':return self.send(add_ledger_entry(data))
                 if self.path=='/api/exportverify':return self.send(add_export_verify(data))
                 if self.path=='/api/backup':return self.send(add_backup(data))
+                if self.path=='/api/tools':
+                    return self.send({'blender':detect_blender(),'godot':detect_godot()})
+                if self.path=='/api/generate-vibe':
+                    return self.send(generate_vibe_asset(data.get('seed',42),data.get('tempo',120),data.get('key','C'),data.get('energy',0.5)))
                 if self.path=='/api/artists':ensure_artists();db=engine.connect();rows=[dict(r) for r in db.execute('SELECT * FROM artists ORDER BY monthly_listeners DESC,name').fetchall()];db.close();return self.send({'artists':rows})
                 if self.path=='/api/artist/add':
                     import uuid; aid=data.get('id') or uuid.uuid4().hex[:8]; ensure_artists(); db=engine.connect()
